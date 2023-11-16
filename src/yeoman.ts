@@ -21,9 +21,7 @@ export const runGenerator = async (
 
   const env = yeoman.createEnv();
   env.register(
-    require.resolve(
-      `@prismatic-io/generator-spectral/generators/${generatorName}`
-    ),
+    require.resolve(`kimco-generator-spectral/generators/${generatorName}`),
     generatorName
   );
   await env.run(generatorName, options);
