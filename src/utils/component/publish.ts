@@ -1,11 +1,12 @@
 import { ux } from "@oclif/core";
-import { exists, fs } from "../../fs";
+import { exists, fs } from "../../fs.js";
 import { resolve, extname } from "path";
 import { ComponentDefinition as ComponentDefinitionTemplate } from "@prismatic-io/spectral";
 import tempy from "tempy";
 import crypto from "crypto";
 import archiver from "archiver";
-import { gqlRequest, gql } from "../../graphql";
+import { gqlRequest, gql } from "../../graphql.js";
+import { seekPackageDistDirectory } from "../import.js";
 import axios from "axios";
 import mimetypes from "mime-types";
 
@@ -22,8 +23,8 @@ type LegacyDefinition = {
  * Prism must be capable of publishing all past component definitions and
  * gracefully publish future component definitions.
  */
-type ComponentDefinition = Omit<ComponentDefinitionTemplate<false>, "hooks"> &
-  Pick<ComponentDefinitionTemplate<true>, "documentationUrl"> &
+export type ComponentDefinition = Omit<ComponentDefinitionTemplate<false, any>, "hooks"> &
+  Pick<ComponentDefinitionTemplate<true, any>, "documentationUrl"> &
   LegacyDefinition;
 
 const componentDefinitionShape: Record<keyof ComponentDefinition, true> = {
@@ -42,57 +43,31 @@ interface ComponentEntrypoint {
   default: ComponentDefinition;
 }
 
-export const seekComponentPackageDistDirectory = async (): Promise<void> => {
-  while (!(await exists("package.json"))) {
-    const tempDir = process.cwd();
-    process.chdir("../");
-    if (process.cwd() == tempDir) {
-      ux.error(
-        "Failed to find 'package.json' file. Is the current path a component?",
-        { exit: 1 }
-      );
-    }
-  }
-
-  if (!(await exists("./dist"))) {
-    ux.error("Failed to find 'dist' folder. Is the current path a component?", {
-      exit: 1,
-    });
-  }
-
-  process.chdir("./dist");
-};
-
 export const loadEntrypoint = async (): Promise<ComponentDefinition> => {
   // If we don't have an index.js in cwd seek directories to find package.json of component
   if (!(await exists("index.js"))) {
-    await seekComponentPackageDistDirectory();
+    await seekPackageDistDirectory("component");
   }
 
   // If we still didn't find index.js error out
   if (!(await exists("index.js"))) {
-    ux.error(
-      "Failed to find 'index.js' entrypoint file. Is the current path a component?",
-      { exit: 1 }
-    );
+    ux.error("Failed to find 'index.js' entrypoint file. Is the current path a component?", {
+      exit: 1,
+    });
   }
 
   // Require index.js and access its root-most default export which should be the Component config
   const cwd = process.cwd();
   const entrypointPath = resolve(cwd, "./index.js");
-  const { default: definition }: ComponentEntrypoint = require(entrypointPath); // eslint-disable-line @typescript-eslint/no-var-requires
+  const { default: definition }: ComponentEntrypoint = require(entrypointPath);
 
   return definition;
 };
 
 const validateIcon = async (iconPath?: string): Promise<boolean> =>
-  !iconPath ||
-  (extname(iconPath.trim().toLowerCase()) === ".png" &&
-    (await exists(iconPath)));
+  !iconPath || (extname(iconPath.trim().toLowerCase()) === ".png" && (await exists(iconPath)));
 
-export const validateDefinition = async (
-  definition: ComponentDefinition
-): Promise<void> => {
+export const validateDefinition = async (definition: ComponentDefinition): Promise<void> => {
   // Output basic information to the user to confirm that this component is what they want to publish
   const {
     display: { label, description, iconPath },
@@ -106,21 +81,18 @@ export const validateDefinition = async (
 
   const componentIconValid = await validateIcon(iconPath);
   if (!componentIconValid) {
-    ux.error(`Component icon does not exist or is not a png. Exiting.`, {
+    ux.error("Component icon does not exist or is not a png. Exiting.", {
       exit: 1,
     });
   }
 
   const connectionIconsValid = await Promise.all(
-    (connections ?? []).map(({ iconPath }) => validateIcon(iconPath))
+    (connections ?? []).map(({ iconPath }) => validateIcon(iconPath)),
   );
   if (connectionIconsValid.some((v) => !v)) {
-    ux.error(
-      `One or more connection icons do not exist or are not a png. Exiting.`,
-      {
-        exit: 1,
-      }
-    );
+    ux.error("One or more connection icons do not exist or are not a png. Exiting.", {
+      exit: 1,
+    });
   }
 };
 
@@ -129,7 +101,11 @@ export const createComponentPackage = async (): Promise<string> => {
   const pathPromise = tempy.write(zip, { extension: "zip" });
 
   // Zip all files in the current directory (since we found the index.js entrypoint)
-  zip.directory(process.cwd(), false);
+  // Set all files' dates to the Unix epoch so that the zip hash is deterministic
+  zip.directory(process.cwd(), false, (entry) => ({
+    ...entry,
+    date: new Date(0),
+  }));
   await zip.finalize();
 
   return pathPromise;
@@ -138,7 +114,7 @@ export const createComponentPackage = async (): Promise<string> => {
 export const checkPackageSignature = async (
   { key, public: isPublic }: ComponentDefinition,
   packagePath: string,
-  customer?: string
+  customer?: string,
 ): Promise<boolean> => {
   // Retrieve the existing signature of the component if it exists.
   const results = await gqlRequest({
@@ -175,35 +151,35 @@ export const checkPackageSignature = async (
 
 export const confirmPublish = async (
   { display: { label, description } }: ComponentDefinition,
-  confirm = true
+  confirm = true,
 ) => {
   if (!confirm) return;
 
   ux.log(label, "-", description);
 
-  const continuePublish = await ux.confirm(
-    `Would you like to publish ${label}? (y/N)`
-  );
+  const continuePublish = await ux.confirm(`Would you like to publish ${label}? (y/N)`);
   if (!continuePublish) ux.exit(0);
 };
 
 export const publishDefinition = async (
   { actions, triggers, dataSources, connections, ...rest }: ComponentDefinition,
   comment?: string,
-  customer?: string
+  customer?: string,
+  forCodeNativeIntegration?: boolean,
 ): Promise<{
   iconUploadUrl: string;
   packageUploadUrl: string;
   connectionIconUploadUrls: Record<string, string>;
   versionNumber: string;
 }> => {
-  const componentDefinition = Object.entries(rest).reduce(
+  const componentDefinition: Record<string, unknown> = Object.entries(rest).reduce(
     (result, [key, value]) =>
       componentDefinitionShape[key as keyof ComponentDefinition]
         ? { ...result, [key]: value }
         : result,
-    {}
+    {},
   );
+  componentDefinition.forCodeNativeIntegration = forCodeNativeIntegration;
 
   const actionDefinitions = Object.values(actions || {}).map((action) => {
     return {
@@ -223,16 +199,14 @@ export const publishDefinition = async (
     };
   });
 
-  const dataSourceDefinitions = Object.values(dataSources || {}).map(
-    (dataSource) => {
-      return {
-        ...dataSource,
-        examplePayload: dataSource?.examplePayload
-          ? JSON.stringify(dataSource?.examplePayload)
-          : JSON.stringify({}),
-      };
-    }
-  );
+  const dataSourceDefinitions = Object.values(dataSources || {}).map((dataSource) => {
+    return {
+      ...dataSource,
+      examplePayload: dataSource?.examplePayload
+        ? JSON.stringify(dataSource?.examplePayload)
+        : JSON.stringify({}),
+    };
+  });
 
   const connectionDefinitions = connections || [];
 
@@ -306,7 +280,7 @@ export const publishDefinition = async (
       ...result,
       [connectionKey]: iconUploadUrl,
     }),
-    {}
+    {},
   );
 
   return {
@@ -320,11 +294,9 @@ export const publishDefinition = async (
 export const uploadFile = async (filePath: string, destinationUrl: string) => {
   try {
     // TODO: Stream instead of Buffer.
-    const response = await axios.put(
-      destinationUrl,
-      await fs.readFile(filePath),
-      { headers: { "Content-Type": mimetypes.contentType(extname(filePath)) } }
-    );
+    const response = await axios.put(destinationUrl, await fs.readFile(filePath), {
+      headers: { "Content-Type": mimetypes.contentType(extname(filePath)) },
+    });
     return response;
   } catch (error) {
     if (axios.isAxiosError(error)) {
@@ -337,7 +309,7 @@ export const uploadFile = async (filePath: string, destinationUrl: string) => {
 
 export const uploadConnectionIcons = async (
   { connections }: ComponentDefinition,
-  connectionIconUploadUrls: Record<string, string>
+  connectionIconUploadUrls: Record<string, string>,
 ): Promise<void> => {
   if (
     !connections ||
@@ -348,22 +320,18 @@ export const uploadConnectionIcons = async (
     return;
   }
 
-  const iconPaths = connections.reduce<Record<string, string>>(
-    (result, { key, iconPath }) => {
-      if (!iconPath) {
-        return result;
-      }
-      return {
-        ...result,
-        [key]: iconPath,
-      };
-    },
-    {}
-  );
+  const iconPaths = connections.reduce<Record<string, string>>((result, { key, iconPath }) => {
+    if (!iconPath) {
+      return result;
+    }
+    return {
+      ...result,
+      [key]: iconPath,
+    };
+  }, {});
 
   const promises = Object.entries(connectionIconUploadUrls).map(
-    async ([connectionKey, uploadUrl]) =>
-      uploadFile(iconPaths[connectionKey], uploadUrl)
+    async ([connectionKey, uploadUrl]) => uploadFile(iconPaths[connectionKey], uploadUrl),
   );
   await Promise.all(promises);
 };

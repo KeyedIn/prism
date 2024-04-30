@@ -1,9 +1,8 @@
 import { Command, Args, Flags } from "@oclif/core";
-import { gql, gqlRequest } from "../../graphql";
+import { gql, gqlRequest } from "../../graphql.js";
 
 export default class MarketplaceCommand extends Command {
-  static description =
-    "Make a version of an Integration available in the Marketplace";
+  static description = "Make a version of an Integration available in the Marketplace";
 
   static args = {
     integration: Args.string({
@@ -26,6 +25,11 @@ export default class MarketplaceCommand extends Command {
       allowNo: true,
       default: true,
     }),
+    "allow-multiple-instances": Flags.boolean({
+      char: "m",
+      description: "Allow a customer to deploy multiple instances of this integration",
+      allowNo: true,
+    }),
     overview: Flags.string({
       char: "o",
       required: true,
@@ -36,7 +40,7 @@ export default class MarketplaceCommand extends Command {
   async run() {
     const {
       args: { integration },
-      flags: { available, deployable, overview },
+      flags: { available, deployable, overview, "allow-multiple-instances": multipleInstances },
     } = await this.parse(MarketplaceCommand);
 
     const marketplaceConfiguration = available
@@ -51,12 +55,14 @@ export default class MarketplaceCommand extends Command {
           $id: ID
           $marketplaceConfiguration: String!
           $overview: String!
+          $multipleInstances: Boolean
         ) {
           updateIntegrationMarketplaceConfiguration(
             input: {
               id: $id
               marketplaceConfiguration: $marketplaceConfiguration
               overview: $overview
+              allowMultipleMarketplaceInstances: $multipleInstances
             }
           ) {
             integration {
@@ -73,6 +79,7 @@ export default class MarketplaceCommand extends Command {
         id: integration,
         marketplaceConfiguration,
         overview,
+        multipleInstances,
       },
     });
 

@@ -1,6 +1,6 @@
 import { Command, Flags } from "@oclif/core";
-import { gqlRequest, gql } from "../../graphql";
-import { parseJsonOrUndefined } from "../../fields";
+import { gqlRequest, gql } from "../../graphql.js";
+import { parseJsonOrUndefined } from "../../fields.js";
 
 export default class CreateCommand extends Command {
   static description = "Create an Instance";
@@ -31,17 +31,16 @@ export default class CreateCommand extends Command {
       char: "v",
       description: "config variables to bind to steps of your instance",
     }),
+    label: Flags.string({
+      char: "l",
+      description: "a label or set of labels to apply to the instance",
+      multiple: true,
+    }),
   };
 
   async run() {
     const {
-      flags: {
-        name,
-        description,
-        integration,
-        customer,
-        "config-vars": configVars,
-      },
+      flags: { name, description, integration, customer, "config-vars": configVars, label },
     } = await this.parse(CreateCommand);
 
     const result = await gqlRequest({
@@ -52,6 +51,7 @@ export default class CreateCommand extends Command {
           $integration: ID!
           $customer: ID!
           $configVariables: [InputInstanceConfigVariable]
+          $labels: [String]
         ) {
           createInstance(
             input: {
@@ -60,6 +60,7 @@ export default class CreateCommand extends Command {
               integration: $integration
               customer: $customer
               configVariables: $configVariables
+              labels: $labels
             }
           ) {
             instance {
@@ -78,6 +79,7 @@ export default class CreateCommand extends Command {
         integration,
         customer,
         configVariables: parseJsonOrUndefined(configVars),
+        labels: label,
       },
     });
 

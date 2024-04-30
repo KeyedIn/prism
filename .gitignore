@@ -2,7 +2,6 @@
 .DS_Store
 
 # Editor settings
-**/.vscode/settings.json
 *.code-workspace
 .idea/
 .eslintcache
@@ -59,3 +58,6 @@ build/Release
 
 # Test component generator files
 src/commands/components/init/temp
+
+# output created by translation
+translations_output.json
