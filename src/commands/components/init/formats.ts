@@ -35,12 +35,17 @@ export default class GenerateFormatsCommand extends Command {
     } = await this.parse(GenerateFormatsCommand);
     const key = camelCase(name);
 
-    await Promise.all([
-      template("tsconfig.json.ejs"),
-      template("webpack.config.js.ejs"),
-      template("jest.config.js.ejs"),
-      template(path.join("assets", "icon.png.ejs")),
-    ]);
+    const context = { component: { name, description: "", key } };
+    const templateFiles = [
+      path.join("assets", "icon.png"),
+      "jest.config.js",
+      "package.json",
+      "tsconfig.json",
+      "webpack.config.js",
+    ];
+    await Promise.all(
+      templateFiles.map((file) => template(path.join("formats", `${file}.ejs`), file, context)),
+    );
 
     await updatePackageJson({
       path: "package.json",
@@ -62,7 +67,7 @@ export default class GenerateFormatsCommand extends Command {
         "@prismatic-io/spectral": "8.0.6",
       },
       devDependencies: {
-        "@prismatic-io/eslint-config-spectral": "2.0.1",
+        "@prismatic-io/eslint-config-spectral": "2.0.2",
         "@types/jest": "25.2.3",
         "copy-webpack-plugin": "10.2.4",
         jest: "26.6.3",
