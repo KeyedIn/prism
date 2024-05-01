@@ -18,6 +18,7 @@ const writeInput = (
   {
     label,
     type,
+    language,
     comments,
     clean,
     default: defaultValue,
@@ -31,6 +32,7 @@ const writeInput = (
     .writeLine(`${key}: input({`)
     .writeLine(`label: "${label}",`)
     .writeLine(`type: "${type}",`)
+    .conditionalWriteLine(language !== undefined, `language: "${language}",`)
     .conditionalWriteLine(required !== undefined, `required: ${required},`)
     .conditionalWriteLine(placeholder !== undefined, `placeholder: "${placeholder}",`)
     .conditionalWriteLine(defaultValue !== undefined, `default: "${defaultValue}",`)

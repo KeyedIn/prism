@@ -57,7 +57,7 @@ export const escapeText = (text?: unknown): string => {
 
 export type GeneratedFunction = string | WriterFunction;
 
-export type Input = Omit<InputFieldDefinition, "clean" | "collection" | "model"> & {
+export type Input = Omit<InputFieldDefinition, "clean" | "collection" | "model" | "language"> & {
   clean: GeneratedFunction;
   /** Upstream API key for this input */
   upstreamKey: string;
@@ -65,6 +65,7 @@ export type Input = Omit<InputFieldDefinition, "clean" | "collection" | "model">
   key: string;
   // FIXME: Improve type safety here by using the original model definition from InputFieldDefinition.
   model?: InputFieldChoice[];
+  language?: string;
 };
 
 export type Action = Omit<
