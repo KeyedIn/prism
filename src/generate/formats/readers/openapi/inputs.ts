@@ -18,17 +18,13 @@ const toInputType = (
     case "number":
       return {
         type: "string",
-        clean: required
-          ? "(value): number => util.types.toNumber(value)"
-          : "(value): number | undefined => (typeof value === 'undefined' || value === '') ? undefined : util.types.toNumber(value)",
+        clean: `(value): unknown => clean.cleanNumber(value, ${required})`,
       };
 
     case "boolean":
       return {
-        type: "boolean",
-        clean: required
-          ? "(value): boolean => util.types.toBool(value)"
-          : "(value): boolean | undefined => (typeof value === 'undefined' || value === '') ? undefined : util.types.toBool(value)",
+        type: required ? "boolean" : "string",
+        clean: `(value): unknown => clean.cleanBool(value, ${required})`,
       };
 
     case "object":
@@ -36,22 +32,35 @@ const toInputType = (
       return {
         type: "code",
         language: "json",
-        clean: "(value): object | undefined => util.types.toObject(value) || undefined",
+        clean: "clean.cleanObject",
       };
 
     default:
       return {
         type: "string",
-        clean: "(value): string | undefined => util.types.toString(value)",
+        clean: `(value): unknown => clean.cleanString(value, ${required})`,
       };
   }
 };
 
 const getInputModel = (
   schema: OpenAPIV3.SchemaObject | OpenAPIV3_1.SchemaObject,
+  required: boolean,
 ): InputFieldChoice[] | undefined => {
   if (schema?.type === "boolean") {
-    // No point generating model values for boolean
+    if (!required) {
+      return [
+        {
+          label: "True",
+          value: "true",
+        },
+        {
+          label: "False",
+          value: "false",
+        },
+      ];
+    }
+
     return undefined;
   }
 
@@ -88,7 +97,7 @@ const buildInput = (parameter: OpenAPI.Parameter, seenKeys: Set<string>): Input 
     : cleanIdentifier(paramKey);
   seenKeys.add(key);
 
-  const model = getInputModel(parameter.schema);
+  const model = getInputModel(parameter.schema, required);
 
   const input = stripUndefined<Input>({
     upstreamKey: paramKey,
@@ -123,17 +132,16 @@ const buildBodyInputs = (
   schema: OpenAPIV3.SchemaObject | OpenAPIV3_1.SchemaObject,
   seenKeys: Set<string>,
 ): Input[] => {
-  const requiredKeys = new Set(schema.required ?? []);
   const properties = getProperties(schema);
 
   return Object.entries(properties)
     .filter(([, prop]) => !prop.readOnly) // Don't create inputs for readonly properties
     .map<Input>(([propKey, prop]) => {
       const schemaType = prop?.type;
-      const required = requiredKeys.has(propKey);
+      const required = false;
       const { type, language, clean } = toInputType((schemaType as string) ?? "string", required);
 
-      const model = getInputModel(prop);
+      const model = getInputModel(prop, required);
 
       const key = seenKeys.has(cleanIdentifier(propKey))
         ? cleanIdentifier(`other ${propKey}`)

@@ -38,6 +38,7 @@ export default class GenerateFormatsCommand extends Command {
     const context = { component: { name, description: "", key } };
     const templateFiles = [
       path.join("assets", "icon.png"),
+      path.join("src", "clean.ts"),
       "jest.config.js",
       "package.json",
       "tsconfig.json",

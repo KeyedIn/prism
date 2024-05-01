@@ -1,0 +1,39 @@
+import { util } from "@prismatic-io/spectral";
+
+const clean = (
+  value: unknown,
+  defaultValue: unknown,
+  required: boolean,
+  allowNull = true,
+): unknown => {
+  if (required) {
+    return defaultValue;
+  }
+
+  if (allowNull && value === "NULL") {
+    return null;
+  }
+
+  return typeof value === "undefined" || value === ""
+    ? undefined
+    : defaultValue;
+};
+
+const cleanString = (value: unknown, required = false): unknown =>
+  clean(value, util.types.toString(value), required);
+
+const cleanNumber = (value: unknown, required = false): unknown =>
+  clean(value, util.types.toNumber(value), required);
+
+const cleanBool = (value: unknown, required = false): unknown =>
+  clean(value, util.types.toBool(value), required, false);
+
+const cleanObject = (value: unknown): object | undefined =>
+  util.types.toObject(value) || undefined;
+
+export default {
+  cleanString,
+  cleanNumber,
+  cleanBool,
+  cleanObject,
+};

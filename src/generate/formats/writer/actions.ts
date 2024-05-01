@@ -114,6 +114,10 @@ const writeActionGroup = (project: Project, groupTag: string, actions: Action[])
       moduleSpecifier: "../client",
       namedImports: ["createClient"],
     },
+    {
+      moduleSpecifier: "../clean",
+      defaultImport: "clean",
+    },
   ]);
 
   const declarations = actions.map(buildActionDeclaration);
